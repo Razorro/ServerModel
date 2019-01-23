@@ -3,6 +3,7 @@ import select
 import copy
 from functools import wraps
 from collections import deque
+from struct import pack
 
 
 def coroutine(func):
@@ -19,17 +20,12 @@ class Server:
     def __init__(self, ip, port, maxConn=100):
         self.ip = ip
         self.port = port
-        self.selectFd = None
         self.sock = None
         self.readChannel = {}                           # read channel
         self.writeChannel = {}                          # write channel
         self.pendingPacket = {}                         # pending to deal
-        self.conn = {}                                  # connnection manager
         self.wlist = set()                              # wait to write
         self.maxConn = maxConn
-
-    def __repr__(self):
-        return "listen on %s:%s, current connection num: %s" % (self.ip, self.port, len(self.conn))
 
     @staticmethod
     def packetTrimmer(byteBuf):
@@ -40,28 +36,29 @@ class Server:
             if len(byteBuf) >= 2:
                 break
 
-        packetSize = int(byteBuf[:2].decode())
+        packetSize = byteBuf[1] * 256 + byteBuf[0]
         while True:
-            datas = yield
-            byteBuf += datas
             if len(byteBuf) >= packetSize+2:
                 break
+            datas = yield
+            byteBuf += datas
 
         packetData = byteBuf[2:packetSize+2]
         return packetData, byteBuf[2+packetSize:]
 
-    def packetProcessing(self):
-        """ Dealing process, customize it as whatever you want """
+    def distributePacket(self):
+        """ package processing, customize it as whatever you want """
         for sock, msgQueue in self.pendingPacket.items():
             if len(msgQueue) == 0:
                 continue
 
             packet = msgQueue.popleft()
-            """
-            calculating ...
-            """
-            self.wlist.add(sock)                                # turn on watching on write socket
-            self.writeChannel[sock].send(packet)
+            self.messageProcess(sock, packet)
+
+    def messageProcess(self, sock, packet):
+        """ Do nothing, just echo to client """
+        self.wlist.add(sock)                        # turn on watching on write socket
+        self.writeChannel[sock].send(packet)
 
     def start(self):
         print('start server at %s:%s' % (self.ip, self.port))
@@ -76,7 +73,7 @@ class Server:
             while True:
                 rlist = [self.sock] + list(self.readChannel.keys())
                 wlist = copy.copy(list(self.wlist))
-                self.packetProcessing()
+                self.distributePacket()
                 readSet, writeSet, exceptSet = select.select(rlist, wlist, [])
 
                 for readFd in readSet:
@@ -93,6 +90,7 @@ class Server:
 
     def createConnection(self):
         conn, addr = self.sock.accept()
+        conn.setblocking(False)
         print("establish connection from %s" % (conn.getpeername(),))
         self.genereateChannel(conn)
 
@@ -138,7 +136,8 @@ class Server:
         writeBuf = bytearray()
         while True:
             data = yield
-            writeBuf += data
+            if len(data):
+                writeBuf = writeBuf + pack('=H', len(data)) + data
             nwritten = sock.send(writeBuf)
             writeBuf = writeBuf[nwritten:]
 
