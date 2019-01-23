@@ -103,20 +103,20 @@ class Server:
         """
         nbytes = sock.recv(4096)
         if len(nbytes) == 0:
-            print('conn from %s closed' % (sock.getsockname(),))
-            del self.writeChannel[sock]
-            del self.readChannel[sock]
-            if sock in self.pendingPacket: del self.pendingPacket[sock]
-            sock.close()
+            self.closeConnection(sock)
         else:
             print('get data from sock%s --> %s' % (sock.getpeername(), nbytes.decode()))
             self.readChannel[sock].send(nbytes)
 
     def writeHandler(self, sock):
-        pass
+        self.writeChannel[sock].send(b'')
 
     def closeConnection(self, sock):
-        pass
+        print('conn from %s closed' % (sock.getsockname(),))
+        del self.writeChannel[sock]
+        del self.readChannel[sock]
+        if sock in self.pendingPacket: del self.pendingPacket[sock]
+        sock.close()
 
     def genereateChannel(self, sock):
         """ Create channel for socket """
