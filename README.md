@@ -10,3 +10,8 @@ buffer, that makes a bit easier and make a more deeper grasp of Python coroutine
 ### coroutine_server
 Simply use select, as an IO multiplex model to make the server has the concurrenct ability, 
 use coroutine as the socket's read and write buffer.
+
+### threaded_server
+Start several work thread to deal with those message from client, instead dealing in the IO loop, it put the work info work queue, wait for work threads to consume, and then, 
+receive the result, send to client, all things clear, Done!
+
